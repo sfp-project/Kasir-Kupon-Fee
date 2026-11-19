@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: #ebf0f5;
+    color: #1e293b;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Light Neumorphic Hospital Surface System */
+.neu-canvas {
+  background-color: #ebf0f5;
+}
+
+.neu-raised {
+  background-color: #eff4f9;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow:
+    7px 7px 16px rgba(163, 177, 198, 0.42),
+    -7px -7px 16px rgba(255, 255, 255, 0.92);
+}
+
+.neu-raised-sm {
+  background-color: #eff4f9;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow:
+    4px 4px 10px rgba(163, 177, 198, 0.38),
+    -4px -4px 10px rgba(255, 255, 255, 0.9);
+}
+
+.neu-inset {
+  background-color: #e4ebf2;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 4px 4px 9px rgba(163, 177, 198, 0.46),
+    inset -4px -4px 9px rgba(255, 255, 255, 0.92);
+}
+
+.neu-inset-sm {
+  background-color: #e4ebf2;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 2px 2px 5px rgba(163, 177, 198, 0.44),
+    inset -2px -2px 5px rgba(255, 255, 255, 0.9);
+}
+
+.neu-btn {
+  background-color: #eff4f9;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow:
+    4px 4px 9px rgba(163, 177, 198, 0.42),
+    -4px -4px 9px rgba(255, 255, 255, 0.92);
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.neu-btn:hover:not(:disabled) {
+  background-color: #f4f8fc;
+  box-shadow:
+    5px 5px 12px rgba(163, 177, 198, 0.48),
+    -5px -5px 12px rgba(255, 255, 255, 0.96);
+}
+
+.neu-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    inset 3px 3px 6px rgba(163, 177, 198, 0.45),
+    inset -3px -3px 6px rgba(255, 255, 255, 0.9);
+}
+
+.neu-btn-emerald {
+  background: linear-gradient(145deg, #16a34a, #15803d);
+  color: #ffffff;
+  border: 1px solid rgba(134, 239, 172, 0.45);
+  box-shadow:
+    4px 4px 10px rgba(21, 128, 61, 0.32),
+    -3px -3px 8px rgba(255, 255, 255, 0.8);
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 140ms ease;
+}
+
+.neu-btn-emerald:hover:not(:disabled) {
+  filter: brightness(1.04);
+  box-shadow:
+    5px 5px 13px rgba(21, 128, 61, 0.38),
+    -3px -3px 9px rgba(255, 255, 255, 0.88);
+}
+
+.neu-btn-emerald:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow:
+    inset 2px 2px 6px rgba(10, 66, 32, 0.42);
+}
+
+.neu-btn-danger {
+  background: linear-gradient(145deg, #dc2626, #b91c1c);
+  color: #ffffff;
+  border: 1px solid rgba(252, 165, 165, 0.4);
+  box-shadow:
+    4px 4px 10px rgba(185, 28, 28, 0.28),
+    -3px -3px 8px rgba(255, 255, 255, 0.78);
+  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 140ms ease;
+}
+
+.neu-btn-danger:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.neu-btn-danger:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Focus visibility for WCAG AA keyboard accessibility */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+}
+
+/* Thermal receipt & A4 daily report print media isolation */
+@media print {
+  body {
+    background: #ffffff !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  #thermal-receipt-print,
+  #thermal-receipt-print *,
+  #daily-report-print,
+  #daily-report-print * {
+    visibility: visible;
+  }
+  #thermal-receipt-print {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    padding: 4mm;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  #daily-report-print {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 8mm 10mm;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+    border: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}

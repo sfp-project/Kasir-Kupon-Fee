@@ -1,0 +1,6 @@
+{
+  "name": "Kasir Kupon Fee RSU Muhammadiyah Babat",
+  "description": "Aplikasi web mandiri khusus petugas Kasir untuk pemantauan, verifikasi, dan pencairan tunai kupon fee Mohat Desa dan Perujuk PKM/Faskes 1 RSU Muhammadiyah Babat.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
