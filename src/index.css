@@ -139,17 +139,22 @@ a:focus-visible {
 @media print {
   body {
     background: #ffffff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
-  body * {
+  .thermal-no-print {
+    display: none !important;
+  }
+  body:not(.thermal-print-page) * {
     visibility: hidden;
   }
-  #thermal-receipt-print,
-  #thermal-receipt-print *,
-  #daily-report-print,
-  #daily-report-print * {
+  body:not(.thermal-print-page) #thermal-receipt-print,
+  body:not(.thermal-print-page) #thermal-receipt-print *,
+  body:not(.thermal-print-page) #daily-report-print,
+  body:not(.thermal-print-page) #daily-report-print * {
     visibility: visible;
   }
-  #thermal-receipt-print {
+  body:not(.thermal-print-page) #thermal-receipt-print {
     position: fixed;
     left: 0;
     top: 0;
@@ -160,7 +165,7 @@ a:focus-visible {
     box-shadow: none !important;
     border: none !important;
   }
-  #daily-report-print {
+  body:not(.thermal-print-page) #daily-report-print {
     position: absolute;
     left: 0;
     top: 0;

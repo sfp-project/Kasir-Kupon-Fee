@@ -210,8 +210,33 @@ export function CalendarDateFilter({
             </button>
           </div>
 
+          {/* Direct Specific Date Input */}
+          <div className="space-y-1">
+            <label htmlFor="direct-date-input" className="block text-[11px] font-bold text-slate-600">
+              Pilih Tanggal Tertentu:
+            </label>
+            <input
+              id="direct-date-input"
+              type="date"
+              value={activeSelectedKey}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (!next) {
+                  onSelectAllDates();
+                  return;
+                }
+                onSelectSpecificDate(next);
+                const parsed = parseLocalDateKey(next);
+                if (parsed) {
+                  setViewMonth({ year: parsed.getFullYear(), month: parsed.getMonth() });
+                }
+              }}
+              className="neu-inset-sm w-full h-9 px-3 rounded-xl font-mono tabular-nums text-xs font-semibold text-slate-800 bg-[#E4EBF2] cursor-pointer"
+            />
+          </div>
+
           {/* Month Navigation */}
-          <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center justify-between pt-0.5">
             <button
               type="button"
               onClick={goPrevMonth}
@@ -259,11 +284,7 @@ export function CalendarDateFilter({
                     key={cell.dateKey}
                     type="button"
                     onClick={() => {
-                      if (cell.dateKey === todayKey) {
-                        onSelectToday();
-                      } else {
-                        onSelectSpecificDate(cell.dateKey!);
-                      }
+                      onSelectSpecificDate(cell.dateKey!);
                       setIsOpen(false);
                     }}
                     className={`relative h-9 rounded-lg font-mono tabular-nums text-xs font-semibold flex flex-col items-center justify-center transition-all cursor-pointer ${

@@ -66,9 +66,9 @@ export function KuponTable({
           <div className="w-12 h-12 rounded-2xl neu-inset flex items-center justify-center text-slate-500 mb-4">
             <SearchX className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-bold text-slate-900">Tidak ada kupon ditemukan</h3>
+          <h3 className="text-base font-bold text-slate-900">Belum ada kupon yang sesuai</h3>
           <p className="text-sm text-slate-600 max-w-md mt-1">
-            Belum ada data kupon yang cocok dengan filter status atau kata kunci pencarian Anda saat ini.
+            Data dibaca langsung secara real-time dari koleksi Firestore <span className="font-mono font-semibold">mohat_coupons</span> Portal Pendaftaran. Ubah filter status/tanggal atau tunggu kupon baru masuk.
           </p>
           <button
             type="button"
@@ -148,14 +148,12 @@ export function KuponTable({
                     {/* Kategori */}
                     <td className="py-4 px-3 align-middle whitespace-nowrap">
                       <div className="font-semibold text-slate-800 text-xs sm:text-sm">
-                        {getKategoriLabel(kupon.kategori)}
+                        {kupon.rawKategoriLabel || getKategoriLabel(kupon.kategori)}
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">
                         {kupon.kategori === 'MOHAT_DESA'
-                          ? 'Tarif Desa / Mohat'
-                          : kupon.penjamin === 'UMUM'
-                            ? 'Rujukan Umum'
-                            : 'Rujukan BPJS'}
+                          ? 'Mohat Desa'
+                          : 'PKM / Faskes 1'}
                       </div>
                     </td>
 

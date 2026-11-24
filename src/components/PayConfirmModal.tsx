@@ -11,7 +11,7 @@ interface PayConfirmModalProps {
   onConfirm: (nominalFee: number, petugasKasir: string, catatanKasir: string) => Promise<void>;
 }
 
-const NOMINAL_PRESETS = [10000, 15000, 20000, 30000, 35000] as const;
+const NOMINAL_PRESETS = [10000, 15000, 20000, 25000, 30000, 35000] as const;
 
 const CASHIER_PRESETS = [
   'RIA ERVINA',

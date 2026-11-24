@@ -1,6 +1,13 @@
-import { Printer, X } from 'lucide-react';
+import { ExternalLink, Printer, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import type { KuponFee } from '../types/kupon.ts';
 import { formatRupiah, formatTanggalJam, getKategoriLabel } from '../utils/formatters.ts';
+import {
+  buildThermalReceiptTabUrl,
+  getSavedThermalPaperSize,
+  saveThermalPaperSize,
+  type ThermalPaperSize,
+} from '../utils/thermalReceiptUrl.ts';
 
 interface ReceiptModalProps {
   kupon: KuponFee | null;
@@ -8,13 +15,21 @@ interface ReceiptModalProps {
 }
 
 export function ReceiptModal({ kupon, onClose }: ReceiptModalProps) {
+  const [paperSize, setPaperSize] = useState<ThermalPaperSize>(() => getSavedThermalPaperSize());
+
+  const printTabUrl = useMemo(() => {
+    if (!kupon) return '#';
+    return buildThermalReceiptTabUrl(kupon, paperSize);
+  }, [kupon, paperSize]);
+
   if (!kupon) return null;
 
   const inputDt = formatTanggalJam(kupon.tanggalInput);
   const cairDt = formatTanggalJam(kupon.waktuCair);
 
-  const handlePrint = () => {
-    window.print();
+  const handleSelectPaperSize = (size: ThermalPaperSize) => {
+    setPaperSize(size);
+    saveThermalPaperSize(size);
   };
 
   return (
@@ -27,11 +42,16 @@ export function ReceiptModal({ kupon, onClose }: ReceiptModalProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="neu-raised w-full max-w-md rounded-2xl p-6">
+      <div className="neu-raised w-full max-w-md rounded-2xl p-6 max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between pb-4 border-b border-slate-300/60">
-          <h2 id="receipt-modal-title" className="text-base font-extrabold text-slate-900">
-            Bukti Pencairan Kupon Fee
-          </h2>
+          <div>
+            <h2 id="receipt-modal-title" className="text-base font-extrabold text-slate-900">
+              Bukti Pencairan Kupon Fee
+            </h2>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Cetak dibuka di tab browser baru khusus printer thermal
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -42,10 +62,38 @@ export function ReceiptModal({ kupon, onClose }: ReceiptModalProps) {
           </button>
         </div>
 
-        {/* Thermal Receipt Printable Block (58mm / 80mm compatible) */}
+        {/* Thermal Paper Size Selector */}
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <span className="text-xs font-semibold text-slate-600">Lebar Kertas Thermal</span>
+          <div
+            role="group"
+            aria-label="Pilih ukuran kertas thermal"
+            className="neu-inset-sm p-1 rounded-xl inline-flex items-center gap-1"
+          >
+            {(['58mm', '80mm'] as const).map((size) => {
+              const active = paperSize === size;
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => handleSelectPaperSize(size)}
+                  className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                    active
+                      ? 'bg-emerald-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {size}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Thermal Receipt Preview Block (58mm / 80mm compatible) */}
         <div
           id="thermal-receipt-print"
-          className="mt-5 bg-white rounded-xl p-5 border border-slate-300/80 text-slate-900 font-mono text-xs leading-relaxed"
+          className="mt-3.5 bg-white rounded-xl p-5 border border-slate-300/80 text-slate-900 font-mono text-xs leading-relaxed"
         >
           <div className="text-center border-b border-dashed border-slate-400 pb-3">
             <p className="font-bold text-sm tracking-tight">RSU MUHAMMADIYAH BABAT</p>
@@ -126,14 +174,16 @@ export function ReceiptModal({ kupon, onClose }: ReceiptModalProps) {
           >
             Tutup
           </button>
-          <button
-            type="button"
-            onClick={handlePrint}
-            className="neu-btn-emerald inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer"
+          <a
+            href={printTabUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="neu-btn-emerald inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold cursor-pointer no-underline"
           >
             <Printer className="w-4 h-4" />
-            <span>Cetak Thermal (58/80mm)</span>
-          </button>
+            <span>Cetak Thermal ({paperSize})</span>
+            <ExternalLink className="w-3.5 h-3.5 opacity-85" />
+          </a>
         </div>
       </div>
     </div>

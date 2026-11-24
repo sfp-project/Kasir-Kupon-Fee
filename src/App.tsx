@@ -1,4 +1,5 @@
-import { CheckCircle2, Info, Printer, X } from 'lucide-react';
+import { onAuthStateChanged, type User } from 'firebase/auth';
+import { CheckCircle2, Info, LogIn, Printer, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { parseLocalDateKey, toLocalDateKey } from './components/CalendarDateFilter.tsx';
 import { CancelLunasModal } from './components/CancelLunasModal.tsx';
@@ -12,23 +13,25 @@ import {
   SearchFilterBar,
   type DateScope,
   type KategoriFilter,
+  type SortOrder,
   type StatusFilter,
 } from './components/SearchFilterBar.tsx';
-import { SimulateCouponModal } from './components/SimulateCouponModal.tsx';
 import { SummaryCards } from './components/SummaryCards.tsx';
 import { TopBar, type ActiveTab } from './components/TopBar.tsx';
-import { createDefaultSyncConfig } from './data/seedKupons.ts';
 import {
-  cancelKuponLunas,
-  createIncomingKupon,
-  fetchKupons,
-  markKuponLunas,
-  resetDemoKupons,
-  saveSyncConfig,
-  subscribeRealtimeKupons,
-  triggerSyncPull,
-} from './services/databaseConnector.ts';
-import type { CashSummary, KuponFee, NewKuponPayload, SyncConfig } from './types/kupon.ts';
+  FIREBASE_META,
+  auth,
+  isPermissionDeniedError,
+  signInWithGoogle,
+  signOutUser,
+} from './firebase.ts';
+import {
+  cancelFirestoreCouponLunas,
+  fetchFirestoreCoupons,
+  markFirestoreCouponLunas,
+  subscribeFirestoreCoupons,
+} from './services/firestoreCoupons.ts';
+import type { CashSummary, KuponFee } from './types/kupon.ts';
 import { exportKuponsToCsv, formatRupiah, isSameLocalDay } from './utils/formatters.ts';
 
 interface ToastNotice {
@@ -43,16 +46,23 @@ const CASHIER_NAME_STORAGE_KEY = 'rsumb_kasir_active_officer';
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('daftar');
   const [kupons, setKupons] = useState<KuponFee[]>([]);
-  const [syncConfig, setSyncConfig] = useState<SyncConfig>(createDefaultSyncConfig);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [needsAuth, setNeedsAuth] = useState(false);
+
+  // Firebase Auth state (used when shared Portal Pendaftaran rules require Google sign-in)
+  const [authUser, setAuthUser] = useState<User | null>(() => auth.currentUser);
+  const [authVersion, setAuthVersion] = useState(0);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   // Filters (default "Menunggu Kasir" as requested)
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('MENUNGGU_KASIR');
   const [kategoriFilter, setKategoriFilter] = useState<KategoriFilter>('SEMUA');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('TERBARU');
   const [dateScope, setDateScope] = useState<DateScope>('SEMUA_TANGGAL');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
@@ -62,7 +72,6 @@ export default function App() {
   const [cancellingKupon, setCancellingKupon] = useState<KuponFee | null>(null);
   const [receiptKupon, setReceiptKupon] = useState<KuponFee | null>(null);
   const [isDailyReportOpen, setIsDailyReportOpen] = useState(false);
-  const [isSimulateOpen, setIsSimulateOpen] = useState(false);
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
 
   // Remembered cashier officer name for faster payouts
@@ -77,6 +86,8 @@ export default function App() {
   // Toast feedback
   const [toast, setToast] = useState<ToastNotice | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const knownIdsRef = useRef<Set<string>>(new Set());
+  const initialSnapshotDoneRef = useRef(false);
 
   const showToast = useCallback(
     (tone: ToastNotice['tone'], message: string, receipt?: KuponFee) => {
@@ -94,68 +105,81 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // Initial load
-  const loadInitialData = useCallback(async () => {
-    setIsLoading(true);
-    setLoadError(null);
-    try {
-      const data = await fetchKupons();
-      setKupons(data.kupons);
-      setSyncConfig(data.syncConfig);
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Gagal memuat data kasir.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
+  // Listen to Firebase Auth changes and re-trigger Firestore subscription when user signs in/out
   useEffect(() => {
-    void loadInitialData();
-  }, [loadInitialData]);
-
-  // Real-time Server-Sent Events subscription
-  useEffect(() => {
-    const unsubscribe = subscribeRealtimeKupons({
-      onConnectionChange: (connected) => setRealtimeConnected(connected),
-      onCreated: (newKupon) => {
-        setKupons((prev) => {
-          if (prev.some((k) => k.id === newKupon.id)) return prev;
-          return [newKupon, ...prev];
-        });
-        setHighlightedId(newKupon.id);
-        setTimeout(() => setHighlightedId((curr) => (curr === newKupon.id ? null : curr)), 4000);
-        showToast(
-          'info',
-          `Kupon baru masuk: ${newKupon.noKupon} — ${newKupon.namaPerujuk} (${formatRupiah(newKupon.nominalFee)})`,
-        );
-      },
-      onUpdated: (updated) => {
-        setKupons((prev) => prev.map((k) => (k.id === updated.id ? updated : k)));
-      },
-      onReset: (nextList) => {
-        setKupons(nextList);
-      },
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setAuthUser(user);
+      setAuthVersion((v) => v + 1);
     });
     return unsubscribe;
-  }, [showToast]);
+  }, []);
 
-  // Optional external polling when external database provider is configured
+  // Real-time Firestore onSnapshot listener directly on mohat_coupons
   useEffect(() => {
-    if (!syncConfig.autoSyncEnabled || syncConfig.provider === 'LOCAL_REST') {
-      return;
-    }
-    const intervalMs = Math.max(10, syncConfig.pollIntervalSeconds || 15) * 1000;
-    const timer = setInterval(async () => {
-      try {
-        const res = await triggerSyncPull();
-        setKupons(res.kupons);
-        setSyncConfig(res.syncConfig);
-      } catch {
-        // Quietly retry next cycle
-      }
-    }, intervalMs);
-    return () => clearInterval(timer);
-  }, [syncConfig.autoSyncEnabled, syncConfig.provider, syncConfig.pollIntervalSeconds]);
+    setIsLoading(true);
+    setLoadError(null);
+    initialSnapshotDoneRef.current = false;
+
+    const unsubscribe = subscribeFirestoreCoupons(
+      (liveKupons) => {
+        // Notify cashier when a brand-new pending coupon arrives from Portal Pendaftaran after initial load
+        if (initialSnapshotDoneRef.current) {
+          const newlyAdded = liveKupons.find(
+            (k) => !knownIdsRef.current.has(k.id) && k.status === 'MENUNGGU_KASIR',
+          );
+          if (newlyAdded) {
+            setHighlightedId(newlyAdded.id);
+            setTimeout(
+              () => setHighlightedId((curr) => (curr === newlyAdded.id ? null : curr)),
+              4000,
+            );
+            showToast(
+              'info',
+              `Kupon baru dari Portal Pendaftaran: ${newlyAdded.noKupon} — ${newlyAdded.namaPerujuk} (${formatRupiah(newlyAdded.nominalFee)})`,
+            );
+          }
+        } else {
+          initialSnapshotDoneRef.current = true;
+        }
+
+        knownIdsRef.current = new Set(liveKupons.map((k) => k.id));
+        setKupons(liveKupons);
+        setRealtimeConnected(true);
+        setNeedsAuth(false);
+        setLoadError(null);
+        setLastSyncedAt(new Date().toISOString());
+        setIsLoading(false);
+      },
+      (_structuredError, rawError) => {
+        setRealtimeConnected(false);
+        setIsLoading(false);
+        const rawMsg = rawError instanceof Error ? rawError.message : String(rawError);
+
+        if (rawMsg.toLowerCase().includes('quota exceeded')) {
+          setLoadError(
+            `Kuota harian Firestore tercapai. Kuota akan direset besok atau Anda dapat memeriksa paket pada https://console.firebase.google.com/project/${FIREBASE_META.projectId}/firestore/databases/${FIREBASE_META.firestoreDatabaseId}/data?openUpgradeDialog=true`,
+          );
+          return;
+        }
+
+        if (isPermissionDeniedError(rawError)) {
+          setNeedsAuth(true);
+          setLoadError(
+            auth.currentUser
+              ? `Akun ${auth.currentUser.email} belum memiliki izin baca pada koleksi "${FIREBASE_META.collection}". Pastikan aturan Firestore Portal Pendaftaran mengizinkan akses akun ini.`
+              : `Akses ke koleksi "${FIREBASE_META.collection}" memerlukan login akun Google RSUMB yang terdaftar di Portal Pendaftaran.`,
+          );
+          return;
+        }
+
+        setLoadError(`Gagal terhubung ke Firestore (${FIREBASE_META.collection}): ${rawMsg}`);
+      },
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [authVersion, showToast]);
 
   // Keyboard shortcut: press '/' anywhere outside inputs to focus barcode search
   useEffect(() => {
@@ -288,9 +312,28 @@ export default function App() {
   }, [preStatusFiltered]);
 
   const visibleKupons = useMemo(() => {
-    if (statusFilter === 'SEMUA') return preStatusFiltered;
-    return preStatusFiltered.filter((k) => k.status === statusFilter);
-  }, [preStatusFiltered, statusFilter]);
+    const filtered =
+      statusFilter === 'SEMUA'
+        ? preStatusFiltered
+        : preStatusFiltered.filter((k) => k.status === statusFilter);
+
+    return [...filtered].sort((a, b) => {
+      const timeA = new Date(a.tanggalInput).getTime();
+      const timeB = new Date(b.tanggalInput).getTime();
+      const safeA = Number.isNaN(timeA) ? 0 : timeA;
+      const safeB = Number.isNaN(timeB) ? 0 : timeB;
+
+      if (safeA !== safeB) {
+        return sortOrder === 'TERBARU' ? safeB - safeA : safeA - safeB;
+      }
+
+      const codeCmp = a.noKupon.localeCompare(b.noKupon, 'id', {
+        numeric: true,
+        sensitivity: 'base',
+      });
+      return sortOrder === 'TERBARU' ? -codeCmp : codeCmp;
+    });
+  }, [preStatusFiltered, statusFilter, sortOrder]);
 
   // Barcode Enter shortcut: instant verification & payout modal trigger
   const handleBarcodeEnter = () => {
@@ -322,21 +365,62 @@ export default function App() {
     setPayingKupon(target);
   };
 
-  // Actions
+  // Manual getDocs refresh from Firestore mohat_coupons
   const handleSyncNow = async () => {
     setIsSyncing(true);
     try {
-      const res = await triggerSyncPull();
-      setKupons(res.kupons);
-      setSyncConfig(res.syncConfig);
-      showToast('success', res.message);
+      const fresh = await fetchFirestoreCoupons();
+      knownIdsRef.current = new Set(fresh.map((k) => k.id));
+      setKupons(fresh);
+      setRealtimeConnected(true);
+      setNeedsAuth(false);
+      setLoadError(null);
+      setLastSyncedAt(new Date().toISOString());
+      showToast(
+        'success',
+        `Berhasil sinkronisasi langsung dari Firestore (${fresh.length} kupon di koleksi ${FIREBASE_META.collection}).`,
+      );
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Sinkronisasi gagal.');
+      if (isPermissionDeniedError(err)) {
+        setNeedsAuth(true);
+        showToast(
+          'error',
+          'Izin akses Firestore ditolak. Silakan masuk dengan akun Google RSUMB terlebih dahulu.',
+        );
+      } else {
+        showToast('error', 'Gagal memuat data terbaru dari Firestore.');
+      }
     } finally {
       setIsSyncing(false);
     }
   };
 
+  const handleSignInGoogle = async () => {
+    setIsAuthLoading(true);
+    try {
+      const user = await signInWithGoogle();
+      showToast('success', `Berhasil masuk sebagai ${user.displayName || user.email}.`);
+    } catch (err) {
+      showToast(
+        'error',
+        err instanceof Error ? err.message : 'Gagal masuk menggunakan akun Google.',
+      );
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setIsAuthLoading(true);
+    try {
+      await signOutUser();
+      showToast('info', 'Anda telah keluar dari akun Google.');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  // Direct Firestore updateDoc when marking LUNAS
   const handleConfirmPay = async (
     nominalFee: number,
     petugasKasir: string,
@@ -354,13 +438,12 @@ export default function App() {
         }
       }
 
-      const { kupon: updated, syncWarning } = await markKuponLunas(payingKupon.id, {
+      const updated = await markFirestoreCouponLunas(payingKupon, {
         nominalFee,
         petugasKasir,
         catatanKasir,
       });
 
-      setKupons((prev) => prev.map((k) => (k.id === updated.id ? updated : k)));
       setPayingKupon(null);
 
       // Clear barcode search after fast scan payout so cashier is ready for next driver
@@ -370,78 +453,47 @@ export default function App() {
 
       showToast(
         'success',
-        syncWarning
-          ? `Kupon ${updated.noKupon} LUNAS (${formatRupiah(updated.nominalFee)}). Catatan sync: ${syncWarning}`
-          : `Kupon ${updated.noKupon} berhasil dicairkan & ditandai LUNAS (${formatRupiah(updated.nominalFee)}).`,
+        `Kupon ${updated.noKupon} berhasil diperbarui LUNAS di Firestore (${formatRupiah(updated.nominalFee)}).`,
         updated,
       );
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Gagal menandai lunas.');
+      if (isPermissionDeniedError(err)) {
+        setNeedsAuth(true);
+        showToast(
+          'error',
+          'Izin update dokumen ditolak oleh aturan Firestore. Silakan login dengan akun Google RSUMB.',
+        );
+      } else {
+        showToast('error', 'Gagal memperbarui status Lunas ke Firestore. Silakan coba lagi.');
+      }
     } finally {
       setIsActionSubmitting(false);
     }
   };
 
+  // Direct Firestore updateDoc when cancelling LUNAS
   const handleConfirmCancelLunas = async (alasan: string) => {
     if (!cancellingKupon) return;
     setIsActionSubmitting(true);
     try {
-      const { kupon: updated } = await cancelKuponLunas(cancellingKupon.id, alasan);
-      setKupons((prev) => prev.map((k) => (k.id === updated.id ? updated : k)));
+      const updated = await cancelFirestoreCouponLunas(cancellingKupon, alasan);
       setCancellingKupon(null);
       showToast(
         'info',
-        `Status Lunas kupon ${updated.noKupon} dibatalkan dan dikembalikan ke antrean Menunggu Kasir.`,
+        `Status Lunas kupon ${updated.noKupon} dibatalkan dan dikembalikan ke Menunggu Kasir di Firestore.`,
       );
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Gagal membatalkan status lunas.');
+      if (isPermissionDeniedError(err)) {
+        setNeedsAuth(true);
+        showToast(
+          'error',
+          'Izin pembatalan ditolak oleh aturan Firestore. Silakan login dengan akun Google RSUMB.',
+        );
+      } else {
+        showToast('error', 'Gagal membatalkan status Lunas di Firestore.');
+      }
     } finally {
       setIsActionSubmitting(false);
-    }
-  };
-
-  const handleSimulateCreate = async (payload: NewKuponPayload) => {
-    setIsActionSubmitting(true);
-    try {
-      const created = await createIncomingKupon(payload);
-      setKupons((prev) => {
-        if (prev.some((k) => k.id === created.id)) return prev;
-        return [created, ...prev];
-      });
-      setIsSimulateOpen(false);
-      setActiveTab('daftar');
-      setStatusFilter('MENUNGGU_KASIR');
-      setHighlightedId(created.id);
-      setTimeout(() => setHighlightedId((curr) => (curr === created.id ? null : curr)), 4000);
-      showToast(
-        'success',
-        `Kupon ${created.noKupon} (${created.namaPerujuk}) masuk ke antrean Menunggu Kasir.`,
-      );
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Gagal mengirim simulasi kupon.');
-    } finally {
-      setIsActionSubmitting(false);
-    }
-  };
-
-  const handleSaveConfig = async (cfg: Partial<SyncConfig>) => {
-    try {
-      const saved = await saveSyncConfig(cfg);
-      setSyncConfig(saved);
-      showToast('success', 'Konfigurasi koneksi database berhasil disimpan.');
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Gagal menyimpan konfigurasi.');
-    }
-  };
-
-  const handleResetDemo = async () => {
-    try {
-      const res = await resetDemoKupons();
-      setKupons(res.kupons);
-      setSyncConfig(res.syncConfig);
-      showToast('success', 'Data simulasi kupon RSUMB berhasil dimuat ulang.');
-    } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Gagal mereset data simulasi.');
     }
   };
 
@@ -463,15 +515,36 @@ export default function App() {
 
       <main className="flex-1 w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
         {loadError ? (
-          <div className="neu-raised rounded-2xl p-5 flex items-center justify-between gap-4 border border-red-300/70">
-            <p className="text-sm font-semibold text-red-800">{loadError}</p>
-            <button
-              type="button"
-              onClick={() => void loadInitialData()}
-              className="neu-btn px-4 py-2 rounded-xl text-xs font-bold text-slate-800 cursor-pointer"
-            >
-              Coba Lagi
-            </button>
+          <div className="neu-raised rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border border-amber-300/80">
+            <div className="space-y-1">
+              <p className="text-sm font-bold text-slate-900">
+                {needsAuth ? 'Diperlukan Autentikasi Firebase Firestore' : 'Kendala Koneksi Firestore'}
+              </p>
+              <p className="text-xs sm:text-sm text-slate-700 leading-relaxed break-words">
+                {loadError}
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0">
+              {needsAuth ? (
+                <button
+                  type="button"
+                  onClick={() => void handleSignInGoogle()}
+                  disabled={isAuthLoading}
+                  className="neu-btn-emerald inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold whitespace-nowrap cursor-pointer disabled:opacity-60"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>{isAuthLoading ? 'Memproses...' : 'Masuk dengan Google'}</span>
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => void handleSyncNow()}
+                disabled={isSyncing}
+                className="neu-btn px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-800 whitespace-nowrap cursor-pointer"
+              >
+                Coba Lagi
+              </button>
+            </div>
           </div>
         ) : null}
 
@@ -489,7 +562,7 @@ export default function App() {
                 </p>
               </div>
               <p className="text-xs text-slate-500 whitespace-nowrap">
-                Tarif standar: Mohat Desa Rp 25.000 · Faskes 1 BPJS Rp 20.000 · Faskes 1 Umum Rp 35.000
+                Firestore Live: <span className="font-mono font-semibold text-emerald-800">{FIREBASE_META.collection}</span>
               </p>
             </div>
 
@@ -513,6 +586,8 @@ export default function App() {
               onStatusFilterChange={setStatusFilter}
               kategoriFilter={kategoriFilter}
               onKategoriFilterChange={setKategoriFilter}
+              sortOrder={sortOrder}
+              onSortOrderChange={setSortOrder}
               dateScope={dateScope}
               selectedDate={selectedDate}
               availableDateKeys={availableDateKeys}
@@ -534,6 +609,7 @@ export default function App() {
                 setSearchQuery('');
                 setStatusFilter('SEMUA');
                 setKategoriFilter('SEMUA');
+                setSortOrder('TERBARU');
                 setDateScope('SEMUA_TANGGAL');
                 setSelectedDate('');
               }}
@@ -551,12 +627,15 @@ export default function App() {
 
         {activeTab === 'koneksi' ? (
           <DatabaseSyncView
-            syncConfig={syncConfig}
             realtimeConnected={realtimeConnected}
-            onSaveConfig={handleSaveConfig}
-            onPullNow={handleSyncNow}
-            onResetDemo={handleResetDemo}
-            onOpenSimulateModal={() => setIsSimulateOpen(true)}
+            totalDocuments={kupons.length}
+            lastSyncedAt={lastSyncedAt}
+            authUser={authUser}
+            isAuthLoading={isAuthLoading}
+            isSyncing={isSyncing}
+            onRefreshNow={handleSyncNow}
+            onSignInGoogle={handleSignInGoogle}
+            onSignOut={handleSignOut}
           />
         ) : null}
       </main>
@@ -589,13 +668,6 @@ export default function App() {
         isOpen={isDailyReportOpen}
         todayLunasKupons={todayLunasKupons}
         onClose={() => setIsDailyReportOpen(false)}
-      />
-
-      <SimulateCouponModal
-        isOpen={isSimulateOpen}
-        isSubmitting={isActionSubmitting}
-        onClose={() => setIsSimulateOpen(false)}
-        onSubmit={handleSimulateCreate}
       />
 
       {/* Clean Floating Toast Notification */}

@@ -29,7 +29,9 @@ export interface KuponFee {
     alasan: string;
     petugasSebelumnya?: string | null;
   } | null;
-  sumberSync?: string; // 'WEB_PENDAFTARAN' | 'SIMULASI' | 'FIREBASE' | 'GOOGLE_SHEETS'
+  sumberSync?: string; // 'FIRESTORE_PORTAL_PENDAFTARAN'
+  rawNominalKey?: string;
+  rawKategoriLabel?: string;
 }
 
 export interface SyncConfig {

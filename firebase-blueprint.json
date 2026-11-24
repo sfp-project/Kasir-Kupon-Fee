@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "MohatCoupon": {
+      "title": "MohatCoupon",
+      "description": "Kupon fee rujukan Mohat Desa & PKM/Faskes 1 yang dibuat oleh Portal Pendaftaran RSU Muhammadiyah Babat dan dicairkan oleh Kasir.",
+      "type": "object",
+      "properties": {
+        "noKupon": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Nomor kupon unik dari Portal Pendaftaran."
+        },
+        "tanggalInput": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu penginputan kupon oleh staf pendaftaran."
+        },
+        "namaPasien": {
+          "type": "string",
+          "maxLength": 160,
+          "description": "Nama pasien rawat inap."
+        },
+        "noRm": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Nomor Rekam Medis pasien (opsional)."
+        },
+        "ruangRanap": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Ruang perawatan rawat inap."
+        },
+        "penjamin": {
+          "type": "string",
+          "enum": ["BPJS", "UMUM", "JASA_RAHARJA"],
+          "description": "Penjamin pembiayaan pasien."
+        },
+        "kategori": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Kategori fee (Mohat Desa atau PKM / Faskes 1)."
+        },
+        "namaPerujuk": {
+          "type": "string",
+          "maxLength": 160,
+          "description": "Nama sopir ambulans atau perujuk."
+        },
+        "asalInstansi": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Asal desa, Puskesmas, atau Faskes 1."
+        },
+        "nominalFee": {
+          "type": "number",
+          "description": "Nominal fee rujukan dalam Rupiah."
+        },
+        "nominalAkhirCair": {
+          "type": "number",
+          "description": "Nominal akhir uang tunai yang dicairkan oleh petugas kasir."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Menunggu Kasir", "Lunas"],
+          "description": "Status pencairan kupon."
+        },
+        "petugasPendaftaran": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Nama staf pendaftaran penginput kupon."
+        },
+        "petugasKasir": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Nama petugas kasir yang mencairkan kupon (opsional)."
+        },
+        "catatanPencairan": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Catatan pencairan oleh kasir (opsional)."
+        },
+        "waktuCair": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pencairan tunai oleh petugas kasir."
+        }
+      },
+      "required": ["noKupon", "namaPasien", "nominalFee", "status"]
+    }
+  },
+  "firestore": {
+    "/mohat_coupons/{couponId}": {
+      "schema": {
+        "$ref": "#/entities/MohatCoupon"
+      },
+      "description": "Koleksi kupon fee Mohat & Perujuk bersama antara Portal Pendaftaran dan Web Kasir RSU Muhammadiyah Babat."
+    }
+  }
+}

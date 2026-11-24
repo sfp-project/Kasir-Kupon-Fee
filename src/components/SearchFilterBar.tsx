@@ -6,6 +6,7 @@ import { CalendarDateFilter } from './CalendarDateFilter.tsx';
 export type StatusFilter = 'SEMUA' | 'MENUNGGU_KASIR' | 'LUNAS';
 export type KategoriFilter = 'SEMUA' | KuponKategori;
 export type DateScope = 'HARI_INI' | 'SEMUA_TANGGAL' | 'TANGGAL_TERTENTU';
+export type SortOrder = 'TERBARU' | 'TERLAMA';
 
 interface SearchFilterBarProps {
   searchRef: RefObject<HTMLInputElement | null>;
@@ -16,6 +17,8 @@ interface SearchFilterBarProps {
   onStatusFilterChange: (status: StatusFilter) => void;
   kategoriFilter: KategoriFilter;
   onKategoriFilterChange: (kategori: KategoriFilter) => void;
+  sortOrder: SortOrder;
+  onSortOrderChange: (order: SortOrder) => void;
   dateScope: DateScope;
   selectedDate: string;
   availableDateKeys: Set<string>;
@@ -38,6 +41,8 @@ export function SearchFilterBar({
   onStatusFilterChange,
   kategoriFilter,
   onKategoriFilterChange,
+  sortOrder,
+  onSortOrderChange,
   dateScope,
   selectedDate,
   availableDateKeys,
@@ -75,7 +80,7 @@ export function SearchFilterBar({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Scan barcode No. Kupon (mis. KPN-261118-001) atau ketik Nama Sopir, Perujuk, Instansi, Pasien..."
+            placeholder="Scan barcode No. Kupon atau ketik Nama Sopir, Perujuk, Instansi, atau Pasien..."
             aria-label="Cari atau scan nomor kupon"
             className="neu-inset w-full h-13 pl-12 pr-28 rounded-xl text-sm sm:text-base font-medium text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-600/40"
           />
@@ -161,8 +166,23 @@ export function SearchFilterBar({
           })}
         </div>
 
-        {/* Secondary Filters: Category & Date Scope */}
+        {/* Secondary Filters: Sort Order, Category & Date Scope */}
         <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2">
+            <label htmlFor="filter-urutan" className="text-xs font-semibold text-slate-600 whitespace-nowrap">
+              Urutan:
+            </label>
+            <select
+              id="filter-urutan"
+              value={sortOrder}
+              onChange={(e) => onSortOrderChange(e.target.value as SortOrder)}
+              className="neu-inset-sm h-10 px-3 rounded-xl text-xs sm:text-sm font-semibold text-slate-800 bg-[#E4EBF2] cursor-pointer"
+            >
+              <option value="TERBARU">Terbaru ke Terlama</option>
+              <option value="TERLAMA">Terlama ke Terbaru</option>
+            </select>
+          </div>
+
           <div className="flex items-center gap-2">
             <label htmlFor="filter-kategori" className="text-xs font-semibold text-slate-600 whitespace-nowrap">
               Kategori:
